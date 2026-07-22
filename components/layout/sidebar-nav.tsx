@@ -25,7 +25,10 @@ export function SidebarNav() {
     <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
         <Waves className="h-5 w-5 text-primary" />
-        <span className="text-sm font-semibold tracking-tight">Coral Academy</span>
+        <span className="font-[family-name:var(--font-wordmark)] text-lg font-medium tracking-tight lowercase">
+          <span className="text-[#d9713c]">coral</span>{" "}
+          <span className="text-[#5b7c99]">academy</span>
+        </span>
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-2">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
