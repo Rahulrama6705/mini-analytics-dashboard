@@ -17,13 +17,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import type { PaginatedResult, Student, StudentSortField } from "@/lib/data-sources/types";
-
-const STATUS_VARIANT: Record<Student["status"], string> = {
-  active: "border-transparent bg-[color-mix(in_oklch,var(--color-chart-3)_16%,transparent)] text-[var(--color-chart-3)]",
-  trial: "border-transparent bg-[color-mix(in_oklch,var(--color-chart-4)_18%,transparent)] text-[var(--color-chart-4)]",
-  inactive: "border-transparent bg-muted text-muted-foreground",
-};
+import type { PaginatedResult, StudentRow, StudentSortField } from "@/lib/data-sources/types";
 
 const dateFmt = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
@@ -72,7 +66,7 @@ export function StudentsTable({
   sortBy,
   sortDir,
 }: {
-  result: PaginatedResult<Student>;
+  result: PaginatedResult<StudentRow>;
   basePath: string;
   params: URLSearchParams;
   sortBy: StudentSortField;
@@ -84,7 +78,7 @@ export function StudentsTable({
   if (rows.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center rounded-lg border text-sm text-muted-foreground">
-        No students match these filters.
+        No learners match these filters.
       </div>
     );
   }
@@ -97,7 +91,7 @@ export function StudentsTable({
             <TableRow>
               <TableHead>
                 <SortableHeader
-                  label="Name"
+                  label="Learner"
                   field="name"
                   basePath={basePath}
                   params={params}
@@ -105,42 +99,43 @@ export function StudentsTable({
                   currentDir={sortDir}
                 />
               </TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Course</TableHead>
+              <TableHead>Parent</TableHead>
+              <TableHead>Parent email</TableHead>
               <TableHead>
                 <SortableHeader
-                  label="Signup date"
-                  field="signup_date"
+                  label="Parent signup date"
+                  field="signupDate"
                   basePath={basePath}
                   params={params}
                   currentSort={sortBy}
                   currentDir={sortDir}
                 />
               </TableHead>
-              <TableHead>
-                <SortableHeader
-                  label="Status"
-                  field="status"
-                  basePath={basePath}
-                  params={params}
-                  currentSort={sortBy}
-                  currentDir={sortDir}
-                />
-              </TableHead>
-              <TableHead>Referral source</TableHead>
+              <TableHead>Subscription</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((s) => (
-              <TableRow key={s.id}>
-                <TableCell className="font-medium">{s.name}</TableCell>
-                <TableCell className="text-muted-foreground">{s.email}</TableCell>
-                <TableCell>{s.course_name}</TableCell>
-                <TableCell className="tabular-nums">{dateFmt.format(new Date(s.signup_date))}</TableCell>
-                <TableCell>
-                  <Badge className={STATUS_VARIANT[s.status]}>{s.status}</Badge>
+              <TableRow key={s.learnerId}>
+                <TableCell className="font-medium">
+                  <Link href={`/customers?learnerId=${s.learnerId}`} className="hover:underline">
+                    {s.name}
+                  </Link>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{s.referral_source}</TableCell>
+                <TableCell>{s.parentName}</TableCell>
+                <TableCell className="text-muted-foreground">{s.email ?? "—"}</TableCell>
+                <TableCell className="tabular-nums">
+                  {s.signupDate ? dateFmt.format(new Date(s.signupDate)) : "—"}
+                </TableCell>
+                <TableCell>
+                  {s.hasActiveSubscription ? (
+                    <Badge className="border-transparent bg-[color-mix(in_oklch,var(--color-chart-3)_16%,transparent)] text-[var(--color-chart-3)]">
+                      active
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">none</Badge>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -1,80 +1,76 @@
-import { getDb } from "@/lib/db/client";
-import type { CategoryPoint, ChurnedSubscription, Charge, MonthlyPoint, Refund } from "./types";
+import { getSupabase } from "@/lib/supabase/server-client";
+import type { CategoryPoint, ChurnedSubscriptionRow, FailedPayment, MonthlyPoint, RefundRow } from "./types";
 
-/** MRR bucketed by month, derived from succeeded recurring charges. */
-export function getMRRTrend(months = 12, now: Date = new Date()): MonthlyPoint[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT strftime('%Y-%m', created_at) AS month, SUM(amount) AS total
-       FROM charges
-       WHERE status = 'succeeded' AND description LIKE '%monthly installment%'
-       GROUP BY month
-       ORDER BY month`
-    )
-    .all() as { month: string; total: number }[];
+// See lib/data-sources/overview.ts for why these call Postgres functions
+// instead of joining/aggregating in JS.
 
-  const byMonth = new Map(rows.map((r) => [r.month, r.total]));
-  const result: MonthlyPoint[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const key = d.toISOString().slice(0, 7);
-    result.push({ month: key, value: byMonth.get(key) ?? 0 });
-  }
-  return result;
+export async function getMRRTrend(months = 12): Promise<MonthlyPoint[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_mrr_trend", { months_back: months });
+  if (error) throw error;
+  return (data as { month: string; value: number }[]).map((r) => ({ month: r.month, value: Number(r.value) }));
 }
 
-/** Succeeded revenue grouped by course (proxy for "plan"). */
-export function getRevenueByCourse(): CategoryPoint[] {
-  return getDb()
-    .prepare(
-      `SELECT c.name AS label, SUM(ch.amount) AS value
-       FROM charges ch
-       JOIN students s ON s.id = ch.customer_id
-       JOIN courses c ON c.id = s.course_id
-       WHERE ch.status = 'succeeded'
-       GROUP BY c.id
-       ORDER BY value DESC`
-    )
-    .all() as CategoryPoint[];
+/** Revenue by course reflects one-off CoursePurchases only — subscriptions aren't tied to a single class. */
+export async function getRevenueByCourse(): Promise<CategoryPoint[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_revenue_by_course", { result_limit: 15 });
+  if (error) throw error;
+  return (data as { label: string; value: number }[]).map((r) => ({ label: r.label, value: Number(r.value) }));
 }
 
-export function getFailedPayments(limit = 50): Charge[] {
-  return getDb()
-    .prepare(
-      `SELECT ch.id, ch.customer_id, s.name AS customer_name, ch.amount, ch.currency,
-              ch.status, ch.created_at, ch.description
-       FROM charges ch
-       JOIN students s ON s.id = ch.customer_id
-       WHERE ch.status = 'failed'
-       ORDER BY ch.created_at DESC
-       LIMIT ?`
-    )
-    .all(limit) as Charge[];
+export async function getFailedPayments(limit = 50): Promise<FailedPayment[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_failed_payments", { result_limit: limit });
+  if (error) throw error;
+  return (data as { id: string; learner_name: string | null; created_at: string; failure_reason: string | null }[]).map(
+    (r) => ({
+      id: r.id,
+      learnerName: r.learner_name ?? "(unknown learner)",
+      createdAt: r.created_at,
+      failureReason: r.failure_reason,
+    })
+  );
 }
 
-export function getRefunds(limit = 50): Refund[] {
-  return getDb()
-    .prepare(
-      `SELECT r.id, r.charge_id, s.name AS customer_name, r.amount, r.reason, r.created_at
-       FROM refunds r
-       JOIN charges ch ON ch.id = r.charge_id
-       JOIN students s ON s.id = ch.customer_id
-       ORDER BY r.created_at DESC
-       LIMIT ?`
-    )
-    .all(limit) as Refund[];
+/** Combines legacy CoursePurchases.refunded_at rows with real Stripe refunds mirrored into RefundRequests. */
+export async function getRefunds(limit = 50): Promise<RefundRow[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_refunds", { result_limit: limit });
+  if (error) throw error;
+  return (
+    data as {
+      purchase_id: string;
+      parent_name: string | null;
+      amount: number;
+      currency: string;
+      refunded_at: string;
+      course_name: string | null;
+      source: "course_purchase" | "stripe_refund";
+    }[]
+  ).map((r) => ({
+    purchaseId: r.purchase_id,
+    parentName: r.parent_name ?? "(unknown parent)",
+    amount: Number(r.amount),
+    currency: r.currency ?? "usd",
+    refundedAt: r.refunded_at,
+    courseName: r.course_name ?? (r.source === "stripe_refund" ? "Stripe subscription payment" : "(unknown class)"),
+    source: r.source,
+  }));
 }
 
-export function getChurnedSubscriptions(limit = 50): ChurnedSubscription[] {
-  return getDb()
-    .prepare(
-      `SELECT sub.id, s.name AS customer_name, sub.plan, sub.status,
-              sub.current_period_end, sub.mrr_amount
-       FROM subscriptions sub
-       JOIN students s ON s.id = sub.customer_id
-       WHERE sub.status = 'canceled'
-       ORDER BY sub.current_period_end DESC
-       LIMIT ?`
-    )
-    .all(limit) as ChurnedSubscription[];
+export async function getChurnedSubscriptions(limit = 50): Promise<ChurnedSubscriptionRow[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_churned_subscriptions", { result_limit: limit });
+  if (error) throw error;
+  return (
+    data as {
+      id: string;
+      learner_name: string | null;
+      subscription_type: string | null;
+      canceled_at: string | null;
+      subscribed_at: string | null;
+    }[]
+  ).map((r) => ({
+    id: r.id,
+    learnerName: r.learner_name ?? "(unknown learner)",
+    subscriptionType: r.subscription_type ?? "unknown",
+    canceledAt: r.canceled_at,
+    subscribedAt: r.subscribed_at,
+  }));
 }

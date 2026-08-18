@@ -49,72 +49,77 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  /* Warm off-white instead of clinical pure white, plus Coral Academy's
+     real brand coral/teal — pulled directly from coralacademy.com's
+     computed styles (--coral-*  custom properties on their site). */
+  --background: oklch(0.99 0.004 60);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: #d84c1c;
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.97 0.006 60);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
+  --muted: oklch(0.97 0.006 60);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: #fbe4dc;
+  --accent-foreground: #d84c1c;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: #2a78d6;
-  --chart-2: #eb6834;
+  --border: oklch(0.92 0.006 60);
+  --input: oklch(0.92 0.006 60);
+  --ring: #d84c1c;
+  --chart-1: #d84c1c;
+  --chart-2: #1f8299;
   --chart-3: #1baf7a;
-  --chart-4: #eda100;
-  --chart-5: #e87ba4;
+  --chart-4: #e2bb46;
+  --chart-5: #5675ff;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: #d84c1c;
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: #fbe4dc;
+  --sidebar-accent-foreground: #d84c1c;
+  --sidebar-border: oklch(0.92 0.006 60);
+  --sidebar-ring: #d84c1c;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  /* Matches coralacademy.com's own dark theme (--coral-background:
+     #181919, --coral-text: #f4f4f4) rather than a generic gray dark mode. */
+  --background: #181919;
+  --foreground: #f4f4f4;
+  --card: #212223;
+  --card-foreground: #f4f4f4;
+  --popover: #212223;
+  --popover-foreground: #f4f4f4;
+  --primary: #f05a26;
+  --primary-foreground: #181919;
+  --secondary: #2a2b2c;
+  --secondary-foreground: #f4f4f4;
+  --muted: #2a2b2c;
+  --muted-foreground: #9197a2;
+  --accent: rgba(216, 76, 28, 0.18);
+  --accent-foreground: #f05a26;
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: #3987e5;
-  --chart-2: #d95926;
+  --ring: #f05a26;
+  --chart-1: #f05a26;
+  --chart-2: #2ea6c2;
   --chart-3: #199e70;
-  --chart-4: #c98500;
-  --chart-5: #d55181;
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --chart-4: #e2bb46;
+  --chart-5: #5675ff;
+  --sidebar: #181919;
+  --sidebar-foreground: #f4f4f4;
+  --sidebar-primary: #f05a26;
+  --sidebar-primary-foreground: #181919;
+  --sidebar-accent: rgba(216, 76, 28, 0.18);
+  --sidebar-accent-foreground: #f05a26;
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: #f05a26;
 }
 
 @layer base {

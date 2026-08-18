@@ -1,4 +1,4 @@
-import type { RetentionPoint } from "@/lib/data-sources/marketing";
+import type { RetentionPoint } from "@/lib/data-sources/types";
 
 export function RetentionBars({ data }: { data: RetentionPoint[] }) {
   return (

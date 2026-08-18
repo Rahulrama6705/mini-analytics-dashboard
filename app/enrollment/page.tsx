@@ -6,19 +6,19 @@ import { CategoryBarChart } from "@/components/dashboard/category-bar-chart";
 import { StudentFiltersBar } from "@/components/dashboard/student-filters";
 import { StudentsTable } from "@/components/dashboard/students-table";
 import { CsvExportButton } from "@/components/dashboard/csv-export-button";
+import { AtRiskLearnersTable } from "@/components/dashboard/at-risk-learners-table";
 import {
   getStudents,
   getEnrollmentsByCourse,
   getSignupsOverTime,
   getTrialToPaidConversionRate,
-  getCourseOptions,
-  getReferralSourceOptions,
+  getLearnersAtRisk,
 } from "@/lib/data-sources";
-import type { StudentSortField, SortDirection } from "@/lib/data-sources/types";
+import type { StudentFilters, StudentSortField, SortDirection } from "@/lib/data-sources/types";
 
 export const dynamic = "force-dynamic";
 
-const SORT_FIELDS: StudentSortField[] = ["name", "signup_date", "status"];
+const SORT_FIELDS: StudentSortField[] = ["name", "signupDate"];
 
 export default async function EnrollmentPage({
   searchParams,
@@ -26,26 +26,27 @@ export default async function EnrollmentPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const status = (sp.status as "active" | "inactive" | "trial" | undefined) || undefined;
-  const courseId = sp.courseId || undefined;
-  const referralSource = sp.referralSource || undefined;
+  const hasActiveSubscription =
+    sp.subscription === "active" ? true : sp.subscription === "inactive" ? false : undefined;
   const from = sp.from || undefined;
   const to = sp.to || undefined;
   const page = sp.page ? Number(sp.page) : 1;
   const sortBy: StudentSortField = SORT_FIELDS.includes(sp.sortBy as StudentSortField)
     ? (sp.sortBy as StudentSortField)
-    : "signup_date";
+    : "signupDate";
   const sortDir: SortDirection = sp.sortDir === "asc" ? "asc" : "desc";
 
-  const filters = { status, courseId, referralSource, from, to, sortBy, sortDir };
+  const filters: StudentFilters = { hasActiveSubscription, from, to, sortBy, sortDir };
 
-  const studentsResult = getStudents({ ...filters, page, pageSize: 20 });
-  const exportResult = getStudents({ ...filters, page: 1, pageSize: 5000 });
-  const enrollmentsByCourse = getEnrollmentsByCourse();
-  const signupsOverTime = getSignupsOverTime(12);
-  const conversionRate = getTrialToPaidConversionRate();
-  const courses = getCourseOptions();
-  const referralSources = getReferralSourceOptions();
+  const [studentsResult, exportResult, enrollmentsByCourse, signupsOverTime, conversionRate, atRiskLearners] =
+    await Promise.all([
+      getStudents({ ...filters, page, pageSize: 20 }),
+      getStudents({ ...filters, page: 1, pageSize: 5000 }),
+      getEnrollmentsByCourse(),
+      getSignupsOverTime(12),
+      getTrialToPaidConversionRate(),
+      getLearnersAtRisk(14, 50),
+    ]);
 
   const urlParams = new URLSearchParams(
     Object.entries(sp).filter(([, v]) => v !== undefined) as [string, string][]
@@ -63,7 +64,7 @@ export default async function EnrollmentPage({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <KpiCard label="Trial-to-paid conversion" value={`${conversionRate}%`} icon={TrendingUp} />
         <KpiCard
-          label="Students shown"
+          label="Learners shown"
           value={String(studentsResult.total)}
           icon={GraduationCap}
           hint="Matching current filters"
@@ -71,31 +72,27 @@ export default async function EnrollmentPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartCard
-          title="Enrollments by course"
-          isEmpty={enrollmentsByCourse.length === 0}
-        >
+        <ChartCard title="Enrollments by course" isEmpty={enrollmentsByCourse.length === 0}>
           <CategoryBarChart data={enrollmentsByCourse} layout="horizontal" />
         </ChartCard>
-        <ChartCard title="Signups over time (12 months)" isEmpty={signupsOverTime.every((p) => p.value === 0)}>
+        <ChartCard title="Parent signups over time (12 months)" isEmpty={signupsOverTime.every((p) => p.value === 0)}>
           <TrendLineChart data={signupsOverTime} valueFormat="number" />
         </ChartCard>
       </div>
 
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium">Student roster</h2>
+          <h2 className="text-sm font-medium">Learner roster</h2>
           <div className="flex items-center gap-2">
-            <StudentFiltersBar courses={courses} referralSources={referralSources} />
+            <StudentFiltersBar />
             <CsvExportButton
-              filename="coral-academy-students.csv"
+              filename="coral-academy-learners.csv"
               rows={exportResult.rows.map((r) => ({
                 name: r.name,
-                email: r.email,
-                course: r.course_name,
-                signup_date: r.signup_date,
-                status: r.status,
-                referral_source: r.referral_source,
+                parent_name: r.parentName,
+                parent_email: r.email ?? "",
+                parent_signup_date: r.signupDate ?? "",
+                has_active_subscription: r.hasActiveSubscription ? "yes" : "no",
               }))}
             />
           </div>
@@ -108,6 +105,8 @@ export default async function EnrollmentPage({
           sortDir={sortDir}
         />
       </div>
+
+      <AtRiskLearnersTable rows={atRiskLearners} />
     </div>
   );
 }

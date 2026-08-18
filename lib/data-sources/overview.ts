@@ -1,102 +1,119 @@
-import { getDb } from "@/lib/db/client";
-import type { MonthlyPoint } from "./types";
+import { getSupabase } from "@/lib/supabase/server-client";
+import type { MonthlyPoint, TodaysSessionRow, QuickStats, RecentActivityItem } from "./types";
 
-// Real swap-in note: each function below becomes a Supabase query
-// (students/enrollments) or Stripe API call (charges/subscriptions),
-// aggregated the same way. Signatures stay the same.
+// These KPIs and trends are computed by Postgres functions (see the
+// `dashboard_*` migration) rather than joined/aggregated here in JS.
+// At this data scale (thousands of learners, tens of thousands of
+// payment records), pulling full tables into the app and building
+// client-side `.in()` ID-list filters blows past PostgREST's request
+// size limits — the aggregation has to happen in SQL.
 
-export function getTotalStudents(): number {
-  const row = getDb().prepare(`SELECT COUNT(*) AS c FROM students`).get() as { c: number };
-  return row.c;
+interface OverviewStatsRow {
+  total_students: number;
+  active_students: number;
+  mrr: string;
+  revenue_this_month: string;
+  churn_rate: string;
 }
 
-export function getActiveStudentsCount(): number {
-  const row = getDb()
-    .prepare(`SELECT COUNT(*) AS c FROM students WHERE status = 'active'`)
-    .get() as { c: number };
-  return row.c;
+export interface OverviewStats {
+  totalStudents: number;
+  activeStudents: number;
+  mrr: number;
+  revenueThisMonth: number;
+  churnRate: number;
 }
 
-/** Sum of mrr_amount across currently-active subscriptions. */
-export function getMRR(): number {
-  const row = getDb()
-    .prepare(`SELECT COALESCE(SUM(mrr_amount), 0) AS total FROM subscriptions WHERE status = 'active'`)
-    .get() as { total: number };
-  return row.total;
+export async function getOverviewStats(): Promise<OverviewStats> {
+  const { data, error } = await getSupabase().rpc("dashboard_overview_stats");
+  if (error) throw error;
+  const row = (data as OverviewStatsRow[])[0];
+  return {
+    totalStudents: Number(row.total_students),
+    activeStudents: Number(row.active_students),
+    mrr: Number(row.mrr),
+    revenueThisMonth: Number(row.revenue_this_month),
+    churnRate: Number(row.churn_rate),
+  };
 }
 
-/** Total succeeded charge amount for the current calendar month. */
-export function getRevenueThisMonth(now: Date = new Date()): number {
-  const monthKey = now.toISOString().slice(0, 7); // "2026-07"
-  const row = getDb()
-    .prepare(
-      `SELECT COALESCE(SUM(amount), 0) AS total FROM charges
-       WHERE status = 'succeeded' AND strftime('%Y-%m', created_at) = ?`
-    )
-    .get(monthKey) as { total: number };
-  return row.total;
+export async function getRevenueByMonth(months = 12): Promise<MonthlyPoint[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_revenue_by_month", { months_back: months });
+  if (error) throw error;
+  return (data as { month: string; value: number }[]).map((r) => ({ month: r.month, value: Number(r.value) }));
 }
 
-/**
- * Churn rate = canceled subscriptions / all subscriptions that were ever
- * billed (active + past_due + canceled). A simple point-in-time measure
- * suited to mock data; the real Stripe swap would likely use a rolling
- * cohort calculation instead.
- */
-export function getChurnRate(): number {
-  const row = getDb()
-    .prepare(
-      `SELECT
-         SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) AS churned,
-         COUNT(*) AS total
-       FROM subscriptions`
-    )
-    .get() as { churned: number; total: number };
-  if (row.total === 0) return 0;
-  return Number(((row.churned / row.total) * 100).toFixed(1));
+export async function getEnrollmentTrend(months = 12): Promise<MonthlyPoint[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_enrollment_trend", { months_back: months });
+  if (error) throw error;
+  return (data as { month: string; value: number }[]).map((r) => ({ month: r.month, value: Number(r.value) }));
 }
 
-/** Succeeded revenue bucketed by month for the trailing N months. */
-export function getRevenueByMonth(months = 12, now: Date = new Date()): MonthlyPoint[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT strftime('%Y-%m', created_at) AS month, SUM(amount) AS total
-       FROM charges
-       WHERE status = 'succeeded'
-       GROUP BY month
-       ORDER BY month`
-    )
-    .all() as { month: string; total: number }[];
-  return fillMonths(rows, months, now);
+export async function getTodaysSessions(): Promise<TodaysSessionRow[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_todays_sessions");
+  if (error) throw error;
+  return (
+    data as {
+      session_id: string;
+      class_id: string;
+      class_title: string | null;
+      class_category: string | null;
+      teacher_name: string | null;
+      start_timestamp: string;
+      end_timestamp: string;
+      status: TodaysSessionRow["status"];
+      learner_count: number;
+      learners: { learner_id: string; learner_name: string | null }[];
+    }[]
+  ).map((r) => ({
+    sessionId: r.session_id,
+    classId: r.class_id,
+    classTitle: r.class_title ?? "(unnamed class)",
+    classCategory: r.class_category ?? "General",
+    teacherName: r.teacher_name ?? "(unassigned teacher)",
+    startTimestamp: r.start_timestamp,
+    endTimestamp: r.end_timestamp,
+    status: r.status,
+    learnerCount: Number(r.learner_count),
+    learners: r.learners.map((l) => ({ learnerId: l.learner_id, learnerName: l.learner_name ?? "(unnamed learner)" })),
+  }));
 }
 
-/** New enrollment counts bucketed by month for the trailing N months. */
-export function getEnrollmentTrend(months = 12, now: Date = new Date()): MonthlyPoint[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT strftime('%Y-%m', enrolled_at) AS month, COUNT(*) AS total
-       FROM enrollments
-       GROUP BY month
-       ORDER BY month`
-    )
-    .all() as { month: string; total: number }[];
-  return fillMonths(rows, months, now);
+export async function getQuickStats(): Promise<QuickStats> {
+  const { data, error } = await getSupabase().rpc("dashboard_quick_stats");
+  if (error) throw error;
+  const row = (
+    data as {
+      today_revenue: number;
+      active_subscriptions: number;
+      learners_enrolled_today: number;
+      failed_payments_count: number;
+    }[]
+  )[0];
+  return {
+    todayRevenue: Number(row.today_revenue),
+    activeSubscriptions: Number(row.active_subscriptions),
+    learnersEnrolledToday: Number(row.learners_enrolled_today),
+    failedPaymentsCount: Number(row.failed_payments_count),
+  };
 }
 
-/** Fills in any months with no rows as 0 and clips to the trailing window. */
-function fillMonths(
-  rows: { month: string; total: number }[],
-  months: number,
-  now: Date
-): MonthlyPoint[] {
-  const byMonth = new Map(rows.map((r) => [r.month, r.total]));
-  const result: MonthlyPoint[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const key = d.toISOString().slice(0, 7);
-    result.push({ month: key, value: byMonth.get(key) ?? 0 });
-  }
-  return result;
+export async function getRecentActivity(limit = 20): Promise<RecentActivityItem[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_recent_activity", { result_limit: limit });
+  if (error) throw error;
+  return (
+    data as {
+      activity_type: RecentActivityItem["activityType"];
+      occurred_at: string;
+      title: string | null;
+      subtitle: string | null;
+      amount: number | null;
+    }[]
+  ).map((r) => ({
+    activityType: r.activity_type,
+    occurredAt: r.occurred_at,
+    title: r.title ?? "(unknown)",
+    subtitle: r.subtitle ?? "",
+    amount: r.amount != null ? Number(r.amount) : null,
+  }));
 }

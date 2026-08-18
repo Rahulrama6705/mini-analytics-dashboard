@@ -1,0 +1,5 @@
+1. There are few other iterations/additions which are required - In the overview page  show what all classes/subjects were taught today (on that particular day) and how many users enrolled for it and who are they?
+2. What are the most popular courses throughout the week? Which teacher is being rewuested for the highest number of classes 
+3. Who are the learners who have spent the maximum time in coral academy the entire week?
+4. ** Most Important - Perform the webhooks on stripe so that wehn you click refund payment in the dashbord (i.e, add the option refund payment) in the dashboard should directly show the "view receipt" option in the dashboard itself and the stripe should process the refund automatically
+5. Try Looking for other features where in the admin hsa the most advantages in. You think and suggest as many as features as possible but it shouldn't be that cluttered either. It should be neat, organised and really helpful. 

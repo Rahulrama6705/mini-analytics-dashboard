@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Geist_Mono, Fredoka } from "next/font/google";
 import "./globals.css";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -35,10 +36,12 @@ export default function RootLayout({
       className={`${inter.variable} ${geistMono.variable} ${fredoka.variable} h-full antialiased`}
     >
       <body className="flex h-full min-h-screen bg-background text-foreground">
-        <SidebarNav />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
-        </div>
+        <TooltipProvider>
+          <SidebarNav />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main className="flex-1 overflow-y-auto p-6">{children}</main>
+          </div>
+        </TooltipProvider>
       </body>
     </html>
   );

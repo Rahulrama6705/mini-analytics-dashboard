@@ -1,15 +1,15 @@
-import { Users, UserCheck, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import { Users, UserCheck, DollarSign, TrendingUp, TrendingDown, Wallet, AlertTriangle } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { ChartCard } from "@/components/dashboard/chart-card";
 import { TrendLineChart } from "@/components/dashboard/trend-line-chart";
+import { CategoryBarChart } from "@/components/dashboard/category-bar-chart";
+import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
 import {
-  getTotalStudents,
-  getActiveStudentsCount,
-  getMRR,
-  getRevenueThisMonth,
-  getChurnRate,
-  getRevenueByMonth,
+  getOverviewStats,
   getEnrollmentTrend,
+  getEnrollmentsByCourse,
+  getQuickStats,
+  getRecentActivity,
 } from "@/lib/data-sources";
 
 export const dynamic = "force-dynamic";
@@ -22,13 +22,14 @@ const currencyFmt = new Intl.NumberFormat("en-US", {
 const numberFmt = new Intl.NumberFormat("en-US");
 
 export default async function OverviewPage() {
-  const totalStudents = getTotalStudents();
-  const activeStudents = getActiveStudentsCount();
-  const mrr = getMRR();
-  const revenueThisMonth = getRevenueThisMonth();
-  const churnRate = getChurnRate();
-  const revenueTrend = getRevenueByMonth(12);
-  const enrollmentTrend = getEnrollmentTrend(12);
+  const [stats, enrollmentTrend, topClasses, quickStats, recentActivity] = await Promise.all([
+    getOverviewStats(),
+    getEnrollmentTrend(12),
+    getEnrollmentsByCourse(),
+    getQuickStats(),
+    getRecentActivity(10),
+  ]);
+  const top5Classes = topClasses.slice(0, 5);
 
   return (
     <div className="flex flex-col gap-6">
@@ -40,28 +41,49 @@ export default async function OverviewPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <KpiCard label="Total students" value={numberFmt.format(totalStudents)} icon={Users} />
-        <KpiCard label="Active students" value={numberFmt.format(activeStudents)} icon={UserCheck} />
-        <KpiCard label="MRR" value={currencyFmt.format(mrr)} icon={DollarSign} />
-        <KpiCard label="Revenue this month" value={currencyFmt.format(revenueThisMonth)} icon={TrendingUp} />
+        <KpiCard label="Total students" value={numberFmt.format(stats.totalStudents)} icon={Users} />
+        <KpiCard label="Active students" value={numberFmt.format(stats.activeStudents)} icon={UserCheck} />
+        <KpiCard label="Monthly Recurring Revenue (MRR)" value={currencyFmt.format(stats.mrr)} icon={DollarSign} />
+        <KpiCard label="Revenue this month" value={currencyFmt.format(stats.revenueThisMonth)} icon={TrendingUp} />
         <KpiCard
           label="Churn rate"
-          value={`${churnRate}%`}
+          value={`${stats.churnRate}%`}
           icon={TrendingDown}
-          tone={churnRate > 15 ? "negative" : "neutral"}
+          tone={stats.churnRate > 15 ? "negative" : "neutral"}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartCard title="Revenue trend (12 months)" isEmpty={revenueTrend.every((p) => p.value === 0)}>
-          <TrendLineChart data={revenueTrend} valueFormat="currency" />
-        </ChartCard>
-        <ChartCard
-          title="New enrollments (12 months)"
-          isEmpty={enrollmentTrend.every((p) => p.value === 0)}
-        >
+        <ChartCard title="New enrollments (12 months)" isEmpty={enrollmentTrend.every((p) => p.value === 0)}>
           <TrendLineChart data={enrollmentTrend} valueFormat="number" />
         </ChartCard>
+        <ChartCard title="Top classes" isEmpty={top5Classes.length === 0}>
+          <CategoryBarChart data={top5Classes} layout="horizontal" />
+        </ChartCard>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Today</h2>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCard label="Revenue today" value={currencyFmt.format(quickStats.todayRevenue)} icon={Wallet} />
+          <KpiCard label="Active subscriptions" value={numberFmt.format(quickStats.activeSubscriptions)} icon={Users} />
+          <KpiCard
+            label="Learners enrolled today"
+            value={numberFmt.format(quickStats.learnersEnrolledToday)}
+            icon={UserCheck}
+          />
+          <KpiCard
+            label="Failed payments (7d)"
+            value={numberFmt.format(quickStats.failedPaymentsCount)}
+            icon={AlertTriangle}
+            tone={quickStats.failedPaymentsCount > 0 ? "negative" : "neutral"}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4">
+        <h2 className="mb-1 text-sm font-medium">Recent activity</h2>
+        <RecentActivityFeed items={recentActivity} />
       </div>
     </div>
   );

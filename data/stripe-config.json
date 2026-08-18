@@ -1,0 +1,12 @@
+{
+  "plans": {
+    "coral_unlimited": {
+      "productId": "prod_UwKpxeNcwvrccs",
+      "priceId": "price_1TwS9s8IjiMX6xbma5jdc0Bh"
+    },
+    "coral_normal": {
+      "productId": "prod_UwKp5gaXPgLmT2",
+      "priceId": "price_1TwS9t8IjiMX6xbmOd2enqje"
+    }
+  }
+}

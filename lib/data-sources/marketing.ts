@@ -1,68 +1,65 @@
-import { getDb } from "@/lib/db/client";
-import type { CategoryPoint } from "./types";
+import { getSupabase } from "@/lib/supabase/server-client";
+import type { CampaignEnrollmentFilters, CampaignEnrollmentRow, PaginatedResult, RetentionPoint } from "./types";
 
-export function getSignupsByReferralSource(): CategoryPoint[] {
-  return getDb()
-    .prepare(
-      `SELECT referral_source AS label, COUNT(*) AS value
-       FROM students
-       GROUP BY referral_source
-       ORDER BY value DESC`
-    )
-    .all() as CategoryPoint[];
+/** % of learners with an active subscription, among parents who signed up at least N months ago. */
+export async function getRetentionCohorts(): Promise<RetentionPoint[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_retention_cohorts");
+  if (error) throw error;
+  return (data as { label: string; cohort_size: number; retention_rate: number }[]).map((r) => ({
+    label: r.label,
+    cohortSize: Number(r.cohort_size),
+    retentionRate: Number(r.retention_rate),
+  }));
 }
 
-/** % of signups per referral source that are non-trial (active/inactive = converted). */
-export function getConversionRateByReferralSource(): CategoryPoint[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT
-         referral_source AS label,
-         ROUND(100.0 * SUM(CASE WHEN status != 'trial' THEN 1 ELSE 0 END) / COUNT(*), 1) AS value
-       FROM students
-       GROUP BY referral_source
-       ORDER BY value DESC`
-    )
-    .all() as CategoryPoint[];
-  return rows;
-}
-
-export interface RetentionPoint {
-  label: string; // "1 month", "3 months", "6 months"
-  retentionRate: number;
-  cohortSize: number;
+interface CampaignEnrollmentRpcRow {
+  enrollment_id: string;
+  learner_id: string;
+  learner_name: string | null;
+  parent_name: string | null;
+  parent_email: string | null;
+  enrollment_status: string;
+  enrollment_date: string | null;
+  campaign_source: string;
+  campaign_signup_at: string | null;
+  campaign_key: string | null;
+  landing_variant: string | null;
+  total_count: number;
 }
 
 /**
- * Simple retention view: of students who signed up at least N months ago,
- * what % are still status = 'active' today.
+ * Enrollments attributed to leads that signed up through an ad campaign (defaults to Meta Ads).
+ * Depends on the `dashboard_campaign_enrollments` Postgres function — when pointing this app at a
+ * different Supabase project (e.g. moving from pre-prod to prod), that function must exist there too.
  */
-export function getRetentionCohorts(now: Date = new Date()): RetentionPoint[] {
-  const db = getDb();
-  const windows = [
-    { label: "1 month", months: 1 },
-    { label: "3 months", months: 3 },
-    { label: "6 months", months: 6 },
-  ];
+export async function getCampaignEnrollments(
+  filters: CampaignEnrollmentFilters = {}
+): Promise<PaginatedResult<CampaignEnrollmentRow>> {
+  const { source = "meta_ads", page = 1, pageSize = 20 } = filters;
 
-  return windows.map(({ label, months }) => {
-    const cutoff = new Date(now);
-    cutoff.setUTCMonth(cutoff.getUTCMonth() - months);
-    const cutoffIso = cutoff.toISOString();
-
-    const row = db
-      .prepare(
-        `SELECT
-           COUNT(*) AS cohortSize,
-           SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS activeCount
-         FROM students
-         WHERE signup_date <= ?`
-      )
-      .get(cutoffIso) as { cohortSize: number; activeCount: number };
-
-    const retentionRate =
-      row.cohortSize === 0 ? 0 : Number(((row.activeCount / row.cohortSize) * 100).toFixed(1));
-
-    return { label, retentionRate, cohortSize: row.cohortSize };
+  const { data, error } = await getSupabase().rpc("dashboard_campaign_enrollments", {
+    source_filter: source,
+    from_date: filters.from ?? null,
+    to_date: filters.to ?? null,
+    page_num: page,
+    page_size: pageSize,
   });
+  if (error) throw error;
+
+  const rows = (data as CampaignEnrollmentRpcRow[]).map((r) => ({
+    enrollmentId: r.enrollment_id,
+    learnerId: r.learner_id,
+    learnerName: r.learner_name ?? "(unnamed learner)",
+    parentName: r.parent_name ?? "(unknown parent)",
+    parentEmail: r.parent_email,
+    enrollmentStatus: r.enrollment_status,
+    enrollmentDate: r.enrollment_date,
+    campaignSource: r.campaign_source,
+    campaignSignupAt: r.campaign_signup_at,
+    campaignName: r.campaign_key,
+    landingVariant: r.landing_variant,
+  }));
+  const total = (data as CampaignEnrollmentRpcRow[])[0]?.total_count ?? 0;
+
+  return { rows, total, page, pageSize };
 }

@@ -42,4 +42,7 @@ yarn-error.log*
 next-env.d.ts
 data/*.db-wal
 data/*.db-shm
+# dummy Stripe payments data — references real learner_id UUIDs, keep local
+data/mock-payments.json
+data/stripe-mapping.json
 .claude/

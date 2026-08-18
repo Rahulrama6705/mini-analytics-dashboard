@@ -3,7 +3,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Charge, ChurnedSubscription, Refund } from "@/lib/data-sources/types";
+import { CsvExportButton } from "@/components/dashboard/csv-export-button";
+import type { ChurnedSubscriptionRow, FailedPayment, RefundRow } from "@/lib/data-sources/types";
 
 const dateFmt = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 const currencyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -23,9 +24,9 @@ export function RevenueTables({
   refunds,
   churnedSubscriptions,
 }: {
-  failedPayments: Charge[];
-  refunds: Refund[];
-  churnedSubscriptions: ChurnedSubscription[];
+  failedPayments: FailedPayment[];
+  refunds: RefundRow[];
+  churnedSubscriptions: ChurnedSubscriptionRow[];
 }) {
   return (
     <Tabs defaultValue="failed" className="gap-3">
@@ -36,27 +37,35 @@ export function RevenueTables({
       </TabsList>
 
       <TabsContent value="failed">
+        <div className="mb-2 flex justify-end">
+          <CsvExportButton
+            filename="coral-academy-failed-payments.csv"
+            rows={failedPayments.map((c) => ({
+              learner: c.learnerName,
+              failure_reason: c.failureReason ?? "",
+              date: c.createdAt,
+            }))}
+          />
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Amount</TableHead>
+                <TableHead>Learner</TableHead>
+                <TableHead>Failure reason</TableHead>
                 <TableHead>Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {failedPayments.length === 0 ? (
-                <EmptyRow colSpan={4} message="No failed payments in this window." />
+                <EmptyRow colSpan={3} message="No failed payments in this window." />
               ) : (
                 failedPayments.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.customer_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{c.description}</TableCell>
-                    <TableCell className="tabular-nums">{currencyFmt.format(c.amount)}</TableCell>
+                    <TableCell className="font-medium">{c.learnerName}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.failureReason ?? "—"}</TableCell>
                     <TableCell className="tabular-nums text-muted-foreground">
-                      {dateFmt.format(new Date(c.created_at))}
+                      {dateFmt.format(new Date(c.createdAt))}
                     </TableCell>
                   </TableRow>
                 ))
@@ -67,27 +76,45 @@ export function RevenueTables({
       </TabsContent>
 
       <TabsContent value="refunds">
+        <div className="mb-2 flex justify-end">
+          <CsvExportButton
+            filename="coral-academy-refunds.csv"
+            rows={refunds.map((r) => ({
+              parent: r.parentName,
+              course: r.courseName,
+              amount: r.amount,
+              date: r.refundedAt,
+              source: r.source,
+            }))}
+          />
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Reason</TableHead>
+                <TableHead>Parent</TableHead>
+                <TableHead>Course</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Source</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {refunds.length === 0 ? (
-                <EmptyRow colSpan={4} message="No refunds in this window." />
+                <EmptyRow colSpan={5} message="No refunds in this window." />
               ) : (
                 refunds.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.customer_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.reason.replaceAll("_", " ")}</TableCell>
+                  <TableRow key={r.purchaseId}>
+                    <TableCell className="font-medium">{r.parentName}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.courseName}</TableCell>
                     <TableCell className="tabular-nums">{currencyFmt.format(r.amount)}</TableCell>
                     <TableCell className="tabular-nums text-muted-foreground">
-                      {dateFmt.format(new Date(r.created_at))}
+                      {dateFmt.format(new Date(r.refundedAt))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={r.source === "stripe_refund" ? "default" : "secondary"}>
+                        {r.source === "stripe_refund" ? "Stripe" : "Course purchase"}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))
@@ -98,14 +125,25 @@ export function RevenueTables({
       </TabsContent>
 
       <TabsContent value="churned">
+        <div className="mb-2 flex justify-end">
+          <CsvExportButton
+            filename="coral-academy-churned-subscriptions.csv"
+            rows={churnedSubscriptions.map((s) => ({
+              learner: s.learnerName,
+              plan: s.subscriptionType,
+              subscribed_at: s.subscribedAt ?? "",
+              canceled_at: s.canceledAt ?? "",
+            }))}
+          />
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Customer</TableHead>
+                <TableHead>Learner</TableHead>
                 <TableHead>Plan</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Period end</TableHead>
+                <TableHead>Subscribed</TableHead>
+                <TableHead>Canceled</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -114,13 +152,15 @@ export function RevenueTables({
               ) : (
                 churnedSubscriptions.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.customer_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{s.plan}</TableCell>
+                    <TableCell className="font-medium">{s.learnerName}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{s.status}</Badge>
+                      <Badge variant="secondary">{s.subscriptionType}</Badge>
                     </TableCell>
                     <TableCell className="tabular-nums text-muted-foreground">
-                      {dateFmt.format(new Date(s.current_period_end))}
+                      {s.subscribedAt ? dateFmt.format(new Date(s.subscribedAt)) : "—"}
+                    </TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      {s.canceledAt ? dateFmt.format(new Date(s.canceledAt)) : "—"}
                     </TableCell>
                   </TableRow>
                 ))

@@ -1,144 +1,86 @@
-import { getDb } from "@/lib/db/client";
-import type { CategoryPoint, MonthlyPoint, PaginatedResult, Student, StudentFilters } from "./types";
+import { getSupabase } from "@/lib/supabase/server-client";
+import type { AtRiskLearnerRow, CategoryPoint, MonthlyPoint, PaginatedResult, StudentFilters, StudentRow } from "./types";
 
-/** Paginated, filterable student roster for the ops table. */
-const SORT_COLUMNS: Record<string, string> = {
-  name: "s.name",
-  signup_date: "s.signup_date",
-  status: "s.status",
-};
+// See lib/data-sources/overview.ts for why these call Postgres functions
+// instead of joining/aggregating in JS.
 
-export function getStudents(filters: StudentFilters = {}): PaginatedResult<Student> {
-  const {
-    status,
-    courseId,
-    referralSource,
-    from,
-    to,
-    page = 1,
-    pageSize = 20,
-    sortBy = "signup_date",
-    sortDir = "desc",
-  } = filters;
+interface StudentRpcRow {
+  learner_id: string;
+  name: string | null;
+  parent_name: string | null;
+  email: string | null;
+  signup_date: string | null;
+  has_active_subscription_out: boolean;
+  total_count: number;
+}
 
-  const where: string[] = [];
-  const params: Record<string, unknown> = {};
+/** Paginated learner roster for the ops table. */
+export async function getStudents(filters: StudentFilters = {}): Promise<PaginatedResult<StudentRow>> {
+  const { page = 1, pageSize = 20, sortBy = "signupDate", sortDir = "desc" } = filters;
 
-  if (status) {
-    where.push("s.status = @status");
-    params.status = status;
-  }
-  if (courseId) {
-    where.push("s.course_id = @courseId");
-    params.courseId = courseId;
-  }
-  if (referralSource) {
-    where.push("s.referral_source = @referralSource");
-    params.referralSource = referralSource;
-  }
-  if (from) {
-    where.push("s.signup_date >= @from");
-    params.from = from;
-  }
-  if (to) {
-    where.push("s.signup_date <= @to");
-    params.to = to;
-  }
+  const { data, error } = await getSupabase().rpc("dashboard_students", {
+    has_active_subscription: filters.hasActiveSubscription ?? null,
+    from_date: filters.from ?? null,
+    to_date: filters.to ?? null,
+    sort_by: sortBy,
+    sort_dir: sortDir,
+    page_num: page,
+    page_size: pageSize,
+  });
+  if (error) throw error;
 
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const db = getDb();
-
-  const total = (
-    db.prepare(`SELECT COUNT(*) AS c FROM students s ${whereSql}`).get(params) as { c: number }
-  ).c;
-
-  const sortColumn = SORT_COLUMNS[sortBy] ?? SORT_COLUMNS.signup_date;
-  const sortDirSql = sortDir === "asc" ? "ASC" : "DESC";
-
-  const rows = db
-    .prepare(
-      `SELECT s.id, s.name, s.email, s.signup_date, s.status, s.course_id,
-              c.name AS course_name, s.referral_source
-       FROM students s
-       JOIN courses c ON c.id = s.course_id
-       ${whereSql}
-       ORDER BY ${sortColumn} ${sortDirSql}
-       LIMIT @limit OFFSET @offset`
-    )
-    .all({ ...params, limit: pageSize, offset: (page - 1) * pageSize }) as Student[];
+  const rows = (data as StudentRpcRow[]).map((r) => ({
+    learnerId: r.learner_id,
+    name: r.name ?? "(unnamed learner)",
+    email: r.email,
+    signupDate: r.signup_date,
+    hasActiveSubscription: r.has_active_subscription_out,
+    parentName: r.parent_name ?? "(unknown parent)",
+  }));
+  const total = (data as StudentRpcRow[])[0]?.total_count ?? 0;
 
   return { rows, total, page, pageSize };
 }
 
-/** Enrollment counts grouped by course for the bar chart. */
-export function getEnrollmentsByCourse(): CategoryPoint[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT c.name AS label, COUNT(*) AS value
-       FROM enrollments e
-       JOIN courses c ON c.id = e.course_id
-       GROUP BY c.id
-       ORDER BY value DESC`
-    )
-    .all() as CategoryPoint[];
-  return rows;
+export async function getEnrollmentsByCourse(): Promise<CategoryPoint[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_enrollments_by_course", { result_limit: 15 });
+  if (error) throw error;
+  return (data as { label: string; value: number }[]).map((r) => ({ label: r.label, value: Number(r.value) }));
 }
 
-/** Student signups bucketed by month for the trailing N months. */
-export function getSignupsOverTime(months = 12, now: Date = new Date()): MonthlyPoint[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT strftime('%Y-%m', signup_date) AS month, COUNT(*) AS total
-       FROM students
-       GROUP BY month
-       ORDER BY month`
-    )
-    .all() as { month: string; total: number }[];
-
-  const byMonth = new Map(rows.map((r) => [r.month, r.total]));
-  const result: MonthlyPoint[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const key = d.toISOString().slice(0, 7);
-    result.push({ month: key, value: byMonth.get(key) ?? 0 });
-  }
-  return result;
+export async function getSignupsOverTime(months = 12): Promise<MonthlyPoint[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_signups_over_time", { months_back: months });
+  if (error) throw error;
+  return (data as { month: string; value: number }[]).map((r) => ({ month: r.month, value: Number(r.value) }));
 }
 
-/**
- * Share of students who started as trial-eligible signups and have since
- * converted to active/completed billing. Mock proxy: active students with
- * at least one succeeded charge, divided by all non-trial students.
- */
-export function getTrialToPaidConversionRate(): number {
-  const db = getDb();
-  const converted = (
-    db
-      .prepare(
-        `SELECT COUNT(DISTINCT s.id) AS c
-         FROM students s
-         JOIN charges ch ON ch.customer_id = s.id AND ch.status = 'succeeded'
-         WHERE s.status != 'trial'`
-      )
-      .get() as { c: number }
-  ).c;
-  const eligible = (
-    db.prepare(`SELECT COUNT(*) AS c FROM students WHERE status != 'trial'`).get() as { c: number }
-  ).c;
-  if (eligible === 0) return 0;
-  return Number(((converted / eligible) * 100).toFixed(1));
+export async function getTrialToPaidConversionRate(): Promise<number> {
+  const { data, error } = await getSupabase().rpc("dashboard_trial_to_paid_rate");
+  if (error) throw error;
+  return Number(data);
 }
 
-export function getCourseOptions(): { id: string; name: string }[] {
-  return getDb().prepare(`SELECT id, name FROM courses ORDER BY name`).all() as {
-    id: string;
-    name: string;
-  }[];
-}
-
-export function getReferralSourceOptions(): string[] {
-  const rows = getDb()
-    .prepare(`SELECT DISTINCT referral_source FROM students ORDER BY referral_source`)
-    .all() as { referral_source: string }[];
-  return rows.map((r) => r.referral_source);
+export async function getLearnersAtRisk(inactivityDays = 14, limit = 50): Promise<AtRiskLearnerRow[]> {
+  const { data, error } = await getSupabase().rpc("dashboard_learners_at_risk", {
+    inactivity_days: inactivityDays,
+    result_limit: limit,
+  });
+  if (error) throw error;
+  return (
+    data as {
+      learner_id: string;
+      learner_name: string | null;
+      is_temporarily_inactive: boolean;
+      last_active_at: string | null;
+      days_inactive: number | null;
+      active_enrollment_count: number;
+    }[]
+  ).map((r) => ({
+    learnerId: r.learner_id,
+    learnerName: r.learner_name ?? "(unnamed learner)",
+    isTemporarilyInactive: r.is_temporarily_inactive,
+    lastActiveAt: r.last_active_at,
+    daysInactive: r.days_inactive,
+    activeEnrollmentCount: Number(r.active_enrollment_count),
+  }));
 }

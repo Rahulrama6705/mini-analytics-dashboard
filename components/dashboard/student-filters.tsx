@@ -6,14 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 
-interface StudentFiltersBarProps {
-  courses: { id: string; name: string }[];
-  referralSources: string[];
-}
-
-const STATUS_OPTIONS = ["active", "inactive", "trial"] as const;
-
-export function StudentFiltersBar({ courses, referralSources }: StudentFiltersBarProps) {
+export function StudentFiltersBar() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -29,60 +22,21 @@ export function StudentFiltersBar({ courses, referralSources }: StudentFiltersBa
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  const hasFilters = ["status", "courseId", "referralSource", "from", "to"].some((k) =>
-    searchParams.get(k)
-  );
+  const hasFilters = ["subscription", "from", "to"].some((k) => searchParams.get(k));
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select
-        value={searchParams.get("status") ?? "all"}
-        onValueChange={(v) => setParam("status", v === "all" ? null : v)}
-      >
-        <SelectTrigger className="h-8 w-[130px] text-xs">
-          <SelectValue placeholder="Status" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All statuses</SelectItem>
-          {STATUS_OPTIONS.map((s) => (
-            <SelectItem key={s} value={s}>
-              {s[0].toUpperCase() + s.slice(1)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select
-        value={searchParams.get("courseId") ?? "all"}
-        onValueChange={(v) => setParam("courseId", v === "all" ? null : v)}
-      >
-        <SelectTrigger className="h-8 w-[190px] text-xs">
-          <SelectValue placeholder="Course" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All courses</SelectItem>
-          {courses.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select
-        value={searchParams.get("referralSource") ?? "all"}
-        onValueChange={(v) => setParam("referralSource", v === "all" ? null : v)}
+        value={searchParams.get("subscription") ?? "all"}
+        onValueChange={(v) => setParam("subscription", v === "all" ? null : v)}
       >
         <SelectTrigger className="h-8 w-[170px] text-xs">
-          <SelectValue placeholder="Referral source" />
+          <SelectValue placeholder="Subscription" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All sources</SelectItem>
-          {referralSources.map((r) => (
-            <SelectItem key={r} value={r}>
-              {r}
-            </SelectItem>
-          ))}
+          <SelectItem value="all">All learners</SelectItem>
+          <SelectItem value="active">Active subscription</SelectItem>
+          <SelectItem value="inactive">No active subscription</SelectItem>
         </SelectContent>
       </Select>
 
@@ -101,12 +55,7 @@ export function StudentFiltersBar({ courses, referralSources }: StudentFiltersBa
       />
 
       {hasFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={() => router.push(pathname)}
-        >
+        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => router.push(pathname)}>
           <X className="h-3 w-3" />
           Clear
         </Button>

@@ -9,13 +9,23 @@ import {
   DollarSign,
   Megaphone,
   Waves,
+  UserSearch,
+  CalendarRange,
+  CalendarDays,
+  Presentation,
+  Target,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/daily", label: "Daily", icon: CalendarDays },
   { href: "/enrollment", label: "Enrollment", icon: GraduationCap },
   { href: "/revenue", label: "Revenue", icon: DollarSign },
   { href: "/marketing", label: "Marketing", icon: Megaphone },
+  { href: "/meta-ads-enrollments", label: "Meta Ads", icon: Target },
+  { href: "/customers", label: "Customers", icon: UserSearch },
+  { href: "/teachers", label: "Teachers", icon: Presentation },
+  { href: "/weekly", label: "Weekly", icon: CalendarRange },
 ];
 
 export function SidebarNav() {
@@ -26,8 +36,8 @@ export function SidebarNav() {
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
         <Waves className="h-5 w-5 text-primary" />
         <span className="font-[family-name:var(--font-wordmark)] text-lg font-medium tracking-tight lowercase">
-          <span className="text-[#d9713c]">coral</span>{" "}
-          <span className="text-[#5b7c99]">academy</span>
+          <span className="text-[#d84c1c]">coral</span>{" "}
+          <span className="text-[#1f8299]">academy</span>
         </span>
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-2">
@@ -51,7 +61,7 @@ export function SidebarNav() {
         })}
       </nav>
       <div className="border-t border-sidebar-border p-3 text-xs text-sidebar-foreground/50">
-        Internal analytics &middot; mock data
+        Internal analytics &middot; preprod data
       </div>
     </aside>
   );
