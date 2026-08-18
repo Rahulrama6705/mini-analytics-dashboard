@@ -285,3 +285,20 @@ export interface CampaignEnrollmentRow {
   campaignName: string | null;
   landingVariant: string | null;
 }
+
+export interface CampaignLeadFilters extends DateRangeFilter {
+  source?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** A lead that signed up through an ad campaign but has no enrollment yet (parent never enrolled a learner). */
+export interface CampaignLeadRow {
+  formSubmissionId: string;
+  parentName: string;
+  parentEmail: string | null;
+  campaignSource: string;
+  campaignSignupAt: string | null;
+  campaignName: string | null;
+  landingVariant: string | null;
+}

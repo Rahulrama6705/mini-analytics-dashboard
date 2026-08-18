@@ -1,5 +1,12 @@
 import { getSupabase } from "@/lib/supabase/server-client";
-import type { CampaignEnrollmentFilters, CampaignEnrollmentRow, PaginatedResult, RetentionPoint } from "./types";
+import type {
+  CampaignEnrollmentFilters,
+  CampaignEnrollmentRow,
+  CampaignLeadFilters,
+  CampaignLeadRow,
+  PaginatedResult,
+  RetentionPoint,
+} from "./types";
 
 /** % of learners with an active subscription, among parents who signed up at least N months ago. */
 export async function getRetentionCohorts(): Promise<RetentionPoint[]> {
@@ -60,6 +67,49 @@ export async function getCampaignEnrollments(
     landingVariant: r.landing_variant,
   }));
   const total = (data as CampaignEnrollmentRpcRow[])[0]?.total_count ?? 0;
+
+  return { rows, total, page, pageSize };
+}
+
+interface CampaignLeadRpcRow {
+  form_submission_id: string;
+  parent_name: string | null;
+  parent_email: string | null;
+  campaign_source: string;
+  campaign_signup_at: string | null;
+  campaign_key: string | null;
+  landing_variant: string | null;
+  total_count: number;
+}
+
+/**
+ * Ad-campaign leads (form submissions with an account created) whose parent has never enrolled a
+ * learner. Depends on `dashboard_campaign_leads_without_enrollment` — see note on getCampaignEnrollments.
+ */
+export async function getCampaignLeadsWithoutEnrollment(
+  filters: CampaignLeadFilters = {}
+): Promise<PaginatedResult<CampaignLeadRow>> {
+  const { source = "meta_ads", page = 1, pageSize = 20 } = filters;
+
+  const { data, error } = await getSupabase().rpc("dashboard_campaign_leads_without_enrollment", {
+    source_filter: source,
+    from_date: filters.from ?? null,
+    to_date: filters.to ?? null,
+    page_num: page,
+    page_size: pageSize,
+  });
+  if (error) throw error;
+
+  const rows = (data as CampaignLeadRpcRow[]).map((r) => ({
+    formSubmissionId: r.form_submission_id,
+    parentName: r.parent_name ?? "(unknown parent)",
+    parentEmail: r.parent_email,
+    campaignSource: r.campaign_source,
+    campaignSignupAt: r.campaign_signup_at,
+    campaignName: r.campaign_key,
+    landingVariant: r.landing_variant,
+  }));
+  const total = (data as CampaignLeadRpcRow[])[0]?.total_count ?? 0;
 
   return { rows, total, page, pageSize };
 }
